@@ -1,0 +1,180 @@
+/*
+===============================================================================
+Quality Checks for Silver Layer
+===============================================================================
+Script Purpose:
+    This script performs various quality checks for data consistency, accuracy, 
+    and standardization across the 'silver' layer. It includes checks for:
+    - Null or duplicate primary keys.
+    - Unwanted spaces in string fields.
+    - Data standardization and consistency.
+    - Invalid date ranges and orders.
+    - Data consistency between related fields.
+
+Usage Notes:
+    - Run these checks after data loading into the Silver Layer.
+    - Investigate and resolve any discrepancies found during the checks.
+===============================================================================
+*/
+
+-- ====================================================================
+-- Quality Check 1: 'silver.crm_cust_info'
+-- Purpose: Validate customer information for consistency and accuracy.
+-- ====================================================================
+
+-- Check for NULLs or Duplicates in Primary Key (cst_id)
+-- Expectation: No Results
+SELECT 
+    cst_id,
+    COUNT(*) AS duplicate_count
+FROM silver.crm_cust_info
+GROUP BY cst_id
+HAVING COUNT(*) > 1 OR cst_id IS NULL;
+
+-- Check for Unwanted Spaces in Customer Key (cst_key)
+-- Expectation: No Results
+SELECT 
+    cst_key 
+FROM silver.crm_cust_info
+WHERE cst_key != TRIM(cst_key);
+
+-- Data Standardization & Consistency: Marital Status
+-- Purpose: Identify inconsistent or unexpected values.
+SELECT DISTINCT 
+    cst_marital_status 
+FROM silver.crm_cust_info;
+
+-- ====================================================================
+-- Quality Check 2: 'silver.crm_prd_info'
+-- Purpose: Validate product information for consistency and accuracy.
+-- ====================================================================
+
+-- Check for NULLs or Duplicates in Primary Key (prd_id)
+-- Expectation: No Results
+SELECT 
+    prd_id,
+    COUNT(*) AS duplicate_count
+FROM silver.crm_prd_info
+GROUP BY prd_id
+HAVING COUNT(*) > 1 OR prd_id IS NULL;
+
+-- Check for Unwanted Spaces in Product Name (prd_nm)
+-- Expectation: No Results
+SELECT 
+    prd_nm 
+FROM silver.crm_prd_info
+WHERE prd_nm != TRIM(prd_nm);
+
+-- Check for NULLs or Negative Values in Product Cost (prd_cost)
+-- Expectation: No Results
+SELECT 
+    prd_cost 
+FROM silver.crm_prd_info
+WHERE prd_cost < 0 OR prd_cost IS NULL;
+
+-- Data Standardization & Consistency: Product Line
+-- Purpose: Identify inconsistent or unexpected values.
+SELECT DISTINCT 
+    prd_line 
+FROM silver.crm_prd_info;
+
+-- Check for Invalid Date Orders (Start Date > End Date)
+-- Expectation: No Results
+SELECT 
+    * 
+FROM silver.crm_prd_info
+WHERE prd_end_dt < prd_start_dt;
+
+-- ====================================================================
+-- Quality Check 3: 'silver.crm_sales_details'
+-- Purpose: Validate sales data for consistency and accuracy.
+-- ====================================================================
+
+-- Check for Invalid Dates (sls_due_dt)
+-- Expectation: No Invalid Dates
+SELECT 
+    NULLIF(sls_due_dt, 0) AS sls_due_dt 
+FROM bronze.crm_sales_details
+WHERE sls_due_dt <= 0 
+    OR LEN(sls_due_dt) != 8 
+    OR sls_due_dt > 20500101 
+    OR sls_due_dt < 19000101;
+
+-- Check for Invalid Date Orders (Order Date > Shipping/Due Dates)
+-- Expectation: No Results
+SELECT 
+    * 
+FROM silver.crm_sales_details
+WHERE sls_order_dt > sls_ship_dt 
+   OR sls_order_dt > sls_due_dt;
+
+-- Check Data Consistency: Sales = Quantity * Price
+-- Expectation: No Results
+SELECT DISTINCT 
+    sls_sales,
+    sls_quantity,
+    sls_price 
+FROM silver.crm_sales_details
+WHERE sls_sales != sls_quantity * sls_price
+   OR sls_sales IS NULL 
+   OR sls_quantity IS NULL 
+   OR sls_price IS NULL
+   OR sls_sales <= 0 
+   OR sls_quantity <= 0 
+   OR sls_price <= 0
+ORDER BY sls_sales, sls_quantity, sls_price;
+
+-- ====================================================================
+-- Quality Check 4: 'silver.erp_cust_az12'
+-- Purpose: Validate ERP customer data for consistency and accuracy.
+-- ====================================================================
+
+-- Identify Out-of-Range Birthdates
+-- Expectation: Birthdates between 1924-01-01 and Today
+SELECT DISTINCT 
+    bdate 
+FROM silver.erp_cust_az12
+WHERE bdate < '1924-01-01' 
+   OR bdate > GETDATE();
+
+-- Data Standardization & Consistency: Gender (gen)
+-- Purpose: Identify inconsistent or unexpected values.
+SELECT DISTINCT 
+    gen 
+FROM silver.erp_cust_az12;
+
+-- ====================================================================
+-- Quality Check 5: 'silver.erp_loc_a101'
+-- Purpose: Validate location data for consistency and accuracy.
+-- ====================================================================
+
+-- Data Standardization & Consistency: Country (cntry)
+-- Purpose: Identify inconsistent or unexpected values.
+SELECT DISTINCT 
+    cntry 
+FROM silver.erp_loc_a101
+ORDER BY cntry;
+
+-- ====================================================================
+-- Quality Check 6: 'silver.erp_px_cat_g1v2'
+-- Purpose: Validate product category data for consistency and accuracy.
+-- ====================================================================
+
+-- Check for Unwanted Spaces in Category Fields
+-- Expectation: No Results
+SELECT 
+    * 
+FROM silver.erp_px_cat_g1v2
+WHERE cat != TRIM(cat) 
+   OR subcat != TRIM(subcat) 
+   OR maintenance != TRIM(maintenance);
+
+-- Data Standardization & Consistency: Maintenance
+-- Purpose: Identify inconsistent or unexpected values.
+SELECT DISTINCT 
+    maintenance 
+FROM silver.erp_px_cat_g1v2;
+
+-- ====================================================================
+-- Script End
+-- ====================================================================
